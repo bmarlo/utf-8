@@ -1,12 +1,18 @@
-## Usage
-
-```C++
 #include <marlo/utf8.hpp>
 #include <iostream>
 
-int main()
+int main(int argc, char** argv)
 {
-    std::string s = "ça marche 😎 🚀";
+    std::string s;
+    if (argc > 1) {
+        s.append(argv[1]);
+        for (int i = 2; i < argc; i++) {
+            s.push_back(' ');
+            s.append(argv[i]);
+        }
+    }
+
+    std::cout << "got string: '" << s << '\'' << '\n';
     bool valid = true;
     std::size_t i = 0;
     std::size_t oldi = 0;
@@ -24,4 +30,3 @@ int main()
     }
     return 0;
 }
-```

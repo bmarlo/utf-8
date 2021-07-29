@@ -19,3 +19,7 @@ endfunction()
 add_library(utf8 STATIC src/utf8.cpp)
 cpp17(utf8)
 target_include_directories(utf8 PUBLIC include)
+
+add_executable(utf8-inspector examples/inspector.cpp)
+cpp17(utf8-inspector)
+target_link_libraries(utf8-inspector utf8)
