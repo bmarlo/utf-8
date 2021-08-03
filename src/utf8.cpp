@@ -214,4 +214,64 @@ void ascii_upper(std::string& s) noexcept
     }
 }
 
+#ifdef _WIN32
+static void encode_impl(std::uint32_t code, std::wstring& dst)
+{
+    if (code <= utf8::max_bmp) {    // [0x0000, 0xffff], 2 bytes
+        dst.push_back(static_cast<wchar_t>(code));
+    } else {                // [0x10000, 0x10ffff], U' = U - 0x10000, U': [0x00000, 0xfffff], 20 bits over 4 bytes
+        code -= 0x10000;    // 00000000 0000yyyy yyyyyyxx xxxxxxxx
+        dst.push_back(static_cast<wchar_t>(0xd800 | (code >> 10)));    // 110110yy yyyyyyyy, high surrogate
+        dst.push_back(static_cast<wchar_t>(0xdc00 | (code & 0x03ff))); // 110111xx xxxxxxxx, low surrogate
+    }
+}
+
+bool encode(std::uint32_t code, std::wstring& dst)
+{
+    if (!is_valid(code)) {
+        return false;
+    }
+
+    encode_impl(code, dst);
+    return true;
+}
+
+bool convert(std::string_view u8, std::wstring& dst)
+{
+    auto push = [&](std::uint32_t code) {
+        encode_impl(code, dst);
+    };
+    return decode_impl(u8, std::move(push));
+}
+
+static bool is_surrogate(wchar_t word)
+{
+    return is_surrogate(static_cast<std::uint32_t>(word));
+}
+
+bool convert(std::wstring_view u16, std::string& dst)
+{
+    std::size_t i = 0;
+    std::size_t size = u16.size();
+    while (i < size) {
+        wchar_t w0 = u16[i++];      // code or high surrogate
+        static_assert(sizeof(wchar_t) == 2);
+        static_assert(std::is_unsigned<wchar_t>::value);
+        if (!is_surrogate(w0)) {    // code: [0x0000, 0xffff]
+            encode_impl(static_cast<std::uint32_t>(w0), dst);
+        } else {            // code: [0x10000, 0x10ffff]
+            wchar_t w1;     // low surrogate
+            if (w0 > 0xdbff || i == size || (w1 = u16[i++]) < 0xdc00 || w1 > 0xdfff) {
+                return false;
+            }
+
+            std::uint32_t code = ((w0 & 0x03ff) << 10) | (w1 & 0x03ff);
+            code += 0x10000;
+            encode_impl(code, dst);
+        }
+    }
+    return true;
+}
+#endif
+
 }}

@@ -108,6 +108,26 @@ void ascii_lower(std::string& s) noexcept;
  */
 void ascii_upper(std::string& s) noexcept;
 
+#ifdef _WIN32
+/**
+ * Encodes the given unicode code point, appending it to the utf-16 string.
+ * Returns `false` if the code point is invalid, `true` otherwise.
+ */
+bool encode(std::uint32_t code, std::wstring& dst);
+
+/**
+ * Converts the given utf-8 string into a utf-16 string, returning whether it
+ * succeded.
+ */
+bool convert(std::string_view u8, std::wstring& dst);
+
+/**
+ * Converts the given utf-16 string into a utf-8 string, returning whether it
+ * succeded.
+ */
+bool convert(std::wstring_view u16, std::string& dst);
+#endif
+
 inline std::string encode(std::uint32_t code)
 {
     std::string u8;
