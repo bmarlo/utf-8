@@ -86,7 +86,7 @@ bool encode(std::uint32_t code, std::string& dst)
  * 1110xxxx >> 3 -> 0001110x, [28, 29], 3 bytes
  * 11110xxx >> 3 -> 00011110, [30], 4 bytes
  */
-constexpr std::uint8_t mbytes[32] = {
+constexpr std::uint8_t bytes_lookup[32] = {
     0, 0, 0, 0, 0, 0, 0, 0,
     0, 0, 0, 0, 0, 0, 0, 0,
     0, 0, 0, 0, 0, 0, 0, 0,
@@ -95,21 +95,21 @@ constexpr std::uint8_t mbytes[32] = {
 
 static std::pair<std::uint8_t, std::uint8_t> multibytes(unsigned char c)
 {
-    auto bytes = mbytes[c >> 3];
+    auto bytes = bytes_lookup[c >> 3];
     return {static_cast<std::uint8_t>(bytes - 2), bytes};
 }
 
-static std::uint32_t decode_impl(std::string_view u8, std::size_t& i)
+static std::uint32_t decode_impl(std::string_view s, std::size_t& i)
 {
-    unsigned char c = u8[i++];
+    unsigned char c = s[i++];
     if (is_ascii(c)) {
         return c;
     }
 
     constexpr std::size_t max_index = -1;
-    static_assert(u8.max_size() < max_index - 2);
+    static_assert(s.max_size() < max_index - 2);
     auto [shifts, bytes] = multibytes(c);   // [0, 1, 2], [2, 3, 4]
-    if (!bytes || u8.size() < i + bytes - 1) {
+    if (!bytes || s.size() < i + bytes - 1) {
         return utf8::bad_char;
     }
 
@@ -119,7 +119,7 @@ static std::uint32_t decode_impl(std::string_view u8, std::size_t& i)
     code <<= shifts;
 
     while (shifts) {        // trailing bytes
-        c = u8[i++];
+        c = s[i++];
         unshift(shifts);
         code |= (c & 0x3f) << shifts;       // 10xxxxxx
         code |= utf8::bad_char * ((c & 0xc0) != 0x80);
@@ -133,11 +133,11 @@ static std::uint32_t decode_impl(std::string_view u8, std::size_t& i)
 }
 
 template<typename cb_t>
-bool decode_impl(std::string_view u8, cb_t on_decoded)
+bool decode_all(std::string_view s, cb_t on_decoded)
 {
     std::size_t i = 0;
-    while (i < u8.size()) {
-        std::uint32_t code = decode_impl(u8, i);
+    while (i < s.size()) {
+        std::uint32_t code = decode_impl(s, i);
         if (code == utf8::bad_char) {
             return false;
         }
@@ -146,17 +146,17 @@ bool decode_impl(std::string_view u8, cb_t on_decoded)
     return true;
 }
 
-bool decode(std::string_view u8, std::vector<std::uint32_t>& dst)
+bool decode(std::string_view s, std::vector<std::uint32_t>& dst)
 {
     auto push = [&](std::uint32_t code) {
         dst.push_back(code);
     };
-    return decode_impl(u8, std::move(push));
+    return decode_all(s, std::move(push));
 }
 
-bool validate(std::string_view u8) noexcept
+bool validate(std::string_view s) noexcept
 {
-    return decode_impl(u8, [](std::uint32_t) {});
+    return decode_all(s, [](std::uint32_t) {});
 }
 
 bool is_ascii(std::string_view s) noexcept
@@ -169,10 +169,10 @@ bool is_ascii(std::string_view s) noexcept
     return true;
 }
 
-bool char_at(std::string_view u8, std::size_t i, std::uint32_t& dst) noexcept
+bool char_at(std::string_view s, std::size_t i, std::uint32_t& dst) noexcept
 {
     std::size_t count = 0, byte = 0;
-    while (next_char(u8, byte, dst)) {
+    while (next_char(s, byte, dst)) {
         if (count++ == i) {
             return true;
         }
@@ -180,19 +180,19 @@ bool char_at(std::string_view u8, std::size_t i, std::uint32_t& dst) noexcept
     return false;
 }
 
-bool char_count(std::string_view u8, std::size_t& dst) noexcept
+bool char_count(std::string_view s, std::size_t& dst) noexcept
 {
     dst = 0;
     auto count = [&](std::uint32_t) {
         ++dst;
     };
-    return decode_impl(u8, std::move(count));
+    return decode_all(s, std::move(count));
 }
 
-bool next_char(std::string_view u8, std::size_t& i, std::uint32_t& dst) noexcept
+bool next_char(std::string_view s, std::size_t& i, std::uint32_t& dst) noexcept
 {
-    if (i < u8.size()) {
-        dst = decode_impl(u8, i);
+    if (i < s.size()) {
+        dst = decode_impl(s, i);
         return dst != utf8::bad_char;
     }
     return false;
@@ -236,12 +236,12 @@ bool encode(std::uint32_t code, std::wstring& dst)
     return true;
 }
 
-bool convert(std::string_view u8, std::wstring& dst)
+bool convert(std::string_view s, std::wstring& dst)
 {
     auto push = [&](std::uint32_t code) {
         encode_impl(code, dst);
     };
-    return decode_impl(u8, std::move(push));
+    return decode_all(s, std::move(push));
 }
 
 static bool is_surrogate(wchar_t word)
@@ -249,19 +249,18 @@ static bool is_surrogate(wchar_t word)
     return is_surrogate(static_cast<std::uint32_t>(word));
 }
 
-bool convert(std::wstring_view u16, std::string& dst)
+bool convert(std::wstring_view ws, std::string& dst)
 {
     std::size_t i = 0;
-    std::size_t size = u16.size();
-    while (i < size) {
-        wchar_t w0 = u16[i++];      // code or high surrogate
+    while (i < ws.size()) {
+        wchar_t w0 = ws[i++];       // code or high surrogate
         static_assert(sizeof(wchar_t) == 2);
         static_assert(std::is_unsigned<wchar_t>::value);
         if (!is_surrogate(w0)) {    // code: [0x0000, 0xffff]
             encode_impl(static_cast<std::uint32_t>(w0), dst);
         } else {            // code: [0x10000, 0x10ffff]
             wchar_t w1;     // low surrogate
-            if (w0 > 0xdbff || i == size || (w1 = u16[i++]) < 0xdc00 || w1 > 0xdfff) {
+            if (w0 > 0xdbff || i == ws.size() || (w1 = ws[i++]) < 0xdc00 || w1 > 0xdfff) {
                 return false;
             }
 
