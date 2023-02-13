@@ -117,13 +117,13 @@ bool encode(std::uint32_t code, std::wstring& dst);
 
 /**
  * Converts the given utf-8 string into a utf-16 string, returning whether it
- * succeded.
+ * succeeded.
  */
 bool convert(std::string_view s, std::wstring& dst);
 
 /**
  * Converts the given utf-16 string into a utf-8 string, returning whether it
- * succeded.
+ * succeeded.
  */
 bool convert(std::wstring_view ws, std::string& dst);
 #endif
